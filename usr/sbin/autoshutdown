@@ -920,13 +920,19 @@ _check_hddio() {
         # time' - 'time now'.
         local hddio_increase=$((HDDIO_RATE * last_checked_sec))
 
-        # Calculate the total value.
-        local t_hddio_read=$((P_HDDIO_DEVS["${hdd}_r"] + hddio_increase))
-        local t_hddio_write=$((P_HDDIO_DEVS["${hdd}_w"] + hddio_increase))
+# Convert possible decimal values from iostat into integers.
+	local hdd_in_int=${hdd_in%.*}
+	local hdd_out_int=${hdd_out%.*}
+	local prev_hdd_r_int=${P_HDDIO_DEVS["${hdd}_r"]%.*}
+	local prev_hdd_w_int=${P_HDDIO_DEVS["${hdd}_w"]%.*}
 
-        # Calculate difference between the last and the actual value.
-        local diff_hddio_read=$((hdd_in - P_HDDIO_DEVS["${hdd}_r"]))
-        local diff_hddio_write=$((hdd_out - P_HDDIO_DEVS["${hdd}_w"]))
+# Calculate the total value.
+	local t_hddio_read=$((prev_hdd_r_int + hddio_increase))
+	local t_hddio_write=$((prev_hdd_w_int + hddio_increase))
+
+# Calculate difference between the last and the actual value.
+	local diff_hddio_read=$((hdd_in_int - prev_hdd_r_int))
+	local diff_hddio_write=$((hdd_out_int - prev_hdd_w_int))
 
         # Calculate hddio-rate in kB/s - format xx.x.
         local last_hddio_read_rate; last_hddio_read_rate="$(
@@ -954,8 +960,8 @@ _check_hddio() {
               msg+="kB_read/s: ${last_hddio_read_rate}, "
               msg+="kB_wrtn/s: ${last_hddio_write_rate}"
 
-        if [[ "${hdd_in}" -gt "${t_hddio_read}" ||
-              "${hdd_out}" -gt "${t_hddio_write}" ]]; then
+        if [[ "${hdd_in_int}" -gt "${t_hddio_read}" ||
+              "${hdd_out_int}" -gt "${t_hddio_write}" ]]; then
             _log "${msg} over: ${HDDIO_RATE} kB/s -> no shutdown"
             rvalue=1
         else
