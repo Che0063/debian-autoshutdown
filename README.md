@@ -144,4 +144,4 @@ Exit code details:
 141 - Initialisation failed for a component.  
 140 - Invalid configuration value where no default is available.  
 139 - A required configuration file was not found.  
-138 - No valid network interface found on system.
+138 - Unused (the script now keeps retrying until a valid network interface is found).

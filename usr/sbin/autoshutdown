@@ -1286,52 +1286,66 @@ _check_config() {
 #                              to IPv6 address mappings.
 #              : $R_IPV4     : IPv4 address regular expression.
 #              : $R_IPV6     : IPv6 address regular expression.
-#   Return     : 0 on success.
+#   Return     : 0 on success. Keeps retrying until a valid interface is found
+#                (for example when a network cable is connected after boot).
 #
 _check_networkconfig() {
     _log "INFO: ------------------------------------------------------"
     _log "INFO: Find available network interfaces and their IP addresses"
 
-    local net_iface; while read -r net_iface; do
-        for (( n=0; n < NET_IFACE_RETRY; n++ )); do
-            local msg=""
-            local state; state="$(< "/sys/class/net/${net_iface}/operstate")"
-            [ "${DEBUG}" == "true" ] && {
-                _log "DEBUG: Network interfaces: ${net_iface}"
-                _log "DEBUG: Network interfacesa status: ${state}"; }
-            for ip_type in ipv4 ipv6; do
-                local valid="false" regex="R_${ip_type^^}"
-                local ip; ip="$(LC_ALL=C
-                    ip -br -"${ip_type: -1}" addr show dev "${net_iface}" |
-                    awk '{sub(/\/[0-9]+$/,"",$3); print $3}')"
-                msg+="IPv${ip_type: -1} address: ${ip:-N/A}, "
-                [[ "${ip}" =~ ^(${!regex})$ ]] && {
-                    [[ "${state}" =~ ^(unknown|dormant|up)$ ]] && {
-                        declare -n ip_ref="NIC_2_${ip_type^^}[${net_iface}]"
-                        # shellcheck disable=SC2034
-                        ip_ref="${ip}"; }
-                    valid="true"; }
+    # Wait between full interface scans when no usable interface is found.
+    # The per-interface NET_IFACE_RETRY/NET_IFACE_SLEEP loop still covers
+    # short start-up delays; this wait covers longer outages such as an
+    # unplugged cable.
+    local -r net_iface_wait=30
+    local net_iface
+    local retries="${NET_IFACE_RETRY}"
+
+    while : ; do
+        while read -r net_iface; do
+            for (( n=0; n < retries; n++ )); do
+                local msg=""
+                local state; state="$(< "/sys/class/net/${net_iface}/operstate")"
                 [ "${DEBUG}" == "true" ] && {
-                    _log "DEBUG: Network interfaces IPv${ip_type: -1} address: ${ip:-N/A}"
-                    _log "DEBUG: Network interfaces IPv${ip_type: -1} address valid: ${valid}"; }
+                    _log "DEBUG: Network interfaces: ${net_iface}"
+                    _log "DEBUG: Network interfaces status: ${state}"; }
+                for ip_type in ipv4 ipv6; do
+                    local valid="false" regex="R_${ip_type^^}"
+                    local ip; ip="$(LC_ALL=C
+                        ip -br -"${ip_type: -1}" addr show dev "${net_iface}" |
+                        awk '{sub(/\/[0-9]+$/,"",$3); print $3}')"
+                    msg+="IPv${ip_type: -1} address: ${ip:-N/A}, "
+                    [[ "${ip}" =~ ^(${!regex})$ ]] && {
+                        [[ "${state}" =~ ^(unknown|dormant|up)$ ]] && {
+                            declare -n ip_ref="NIC_2_${ip_type^^}[${net_iface}]"
+                            # shellcheck disable=SC2034
+                            ip_ref="${ip}"; }
+                        valid="true"; }
+                    [ "${DEBUG}" == "true" ] && {
+                        _log "DEBUG: Network interfaces IPv${ip_type: -1} address: ${ip:-N/A}"
+                        _log "DEBUG: Network interfaces IPv${ip_type: -1} address valid: ${valid}"; }
+                done
+
+                [[ -n "${NIC_2_IPV4["${net_iface}"]:-}" ||
+                   -n "${NIC_2_IPV6["${net_iface}"]:-}" ]] && {
+                    _log "INFO: '${net_iface}' has ${msg::-2}"
+                    NICS+=("${net_iface}")
+                    break; }
+
+                [ $((n + 1)) -lt "${retries}" ] && {
+                    _log "INFO: '${net_iface}' status: ${state}, ${msg}retrying in ${NET_IFACE_SLEEP}s ..."
+                    sleep "${NET_IFACE_SLEEP}"; }
             done
+        done < <(LC_ALL=C ip -br link show |
+                    awk -v regex="^(${FORCE_NIC// /|})" \
+                        '$1 ~ regex && !/SLAVE/{sub(/@.*/,"",$1); print $1}')
 
-            [[ -n "${NIC_2_IPV4["${net_iface}"]:-}" ||
-               -n "${NIC_2_IPV6["${net_iface}"]:-}" ]] && {
-                _log "INFO: '${net_iface}' has ${msg::-2}"
-                NICS+=("${net_iface}")
-                break; }
+        [ "${#NICS[@]}" -gt 0 ] && break
 
-            _log "INFO: '${net_iface}' status: ${state}, ${msg}retrying in ${NET_IFACE_SLEEP}s ..."
-            sleep "${NET_IFACE_SLEEP}"
-        done
-    done < <(LC_ALL=C ip -br link show |
-                awk -v regex="^(${FORCE_NIC// /|})" \
-                    '$1 ~ regex && !/SLAVE/{sub(/@.*/,"",$1); print $1}')
-
-    [ "${#NICS[@]}" -eq 0 ] && {
-        _log "ERR: No valid network interface found, exiting ..."
-        exit 138; }
+        _log "INFO: No valid network interface found, retrying in ${net_iface_wait}s ..."
+        sleep "${net_iface_wait}"
+        retries=1
+    done
     return 0
 }
 
