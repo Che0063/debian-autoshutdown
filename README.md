@@ -1,3 +1,10 @@
+Everything below is a a fork of the openmediavault-autoshutdown plugin, but modified to work on debian 13/trixie.
+
+The modifications made are done using Claude. They work fine on my systems.
+
+I used this to shut down my Proxmox Backup Server after idle. The same server wakes up via BIOS Schedule just before backups, or via Wake on Lan on demand
+
+
 debian-autoshutdown plugin
 ==================================
 
@@ -144,4 +151,4 @@ Exit code details:
 141 - Initialisation failed for a component.  
 140 - Invalid configuration value where no default is available.  
 139 - A required configuration file was not found.  
-138 - No valid network interface found on system.
+138 - Unused (the script now keeps retrying until a valid network interface is found).

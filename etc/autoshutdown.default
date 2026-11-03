@@ -307,6 +307,9 @@ NET_IFACE_RETRY=12
     # states how many times to retry the interface to see if it change to a
     # one of the above mentioned states. This combiners with NET_IFACE_SLEEP to
     # make the network interface retry mechanism. (default=12)
+    # After these retries, if no usable interface is found (for example because
+    # the network cable is unplugged), the script waits 30 seconds and scans
+    # again, repeating until an interface is available. It does not exit.
 
 NET_IFACE_SLEEP=5
     # The amount of time to sleep between re-checking a network interface
